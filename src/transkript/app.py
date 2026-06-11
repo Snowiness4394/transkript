@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -170,12 +171,18 @@ class TranskriptApp(App):
     @on(Button.Pressed, "#open-file-btn")
     def handle_open_file(self, event: Button.Pressed) -> None:
         if self.last_file:
-            os.startfile(self.last_file) if hasattr(os, 'startfile') else os.system(f'xdg-open "{self.last_file}"')
+            if hasattr(os, 'startfile'):
+                os.startfile(self.last_file)
+            else:
+                subprocess.run(["xdg-open", self.last_file], check=False)
 
     @on(Button.Pressed, "#open-folder-btn")
     def handle_open_folder(self, event: Button.Pressed) -> None:
         if self.last_dir:
-            os.startfile(self.last_dir) if hasattr(os, 'startfile') else os.system(f'xdg-open "{self.last_dir}"')
+            if hasattr(os, 'startfile'):
+                os.startfile(self.last_dir)
+            else:
+                subprocess.run(["xdg-open", self.last_dir], check=False)
 
     def _start_recording(self) -> None:
         """Start recording audio."""
