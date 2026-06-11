@@ -48,15 +48,16 @@ class Transcriber:
             wf.setframerate(SAMPLE_RATE)
             wf.writeframes(audio_int16.tobytes())
 
-    def transcribe(self, audio: np.ndarray) -> list[Segment]:
+    def transcribe(self, audio: np.ndarray, language: str | None = None) -> list[Segment]:
         """Transcribe a float32 numpy array and return segments with timestamps."""
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        segments, info = self._model.transcribe(
-            audio,
-            beam_size=5,
-        )
+        kwargs = {"beam_size": 5}
+        if language:
+            kwargs["language"] = language
+
+        segments, info = self._model.transcribe(audio, **kwargs)
 
         result = []
         for seg in segments:

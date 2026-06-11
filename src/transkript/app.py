@@ -21,6 +21,29 @@ from transkript.audio import (
 )
 from transkript.transcriber import Transcriber
 
+LANGUAGES = [
+    ("Auto-detect", ""),
+    ("English", "en"),
+    ("Spanish", "es"),
+    ("French", "fr"),
+    ("German", "de"),
+    ("Italian", "it"),
+    ("Portuguese", "pt"),
+    ("Russian", "ru"),
+    ("Japanese", "ja"),
+    ("Chinese", "zh"),
+    ("Korean", "ko"),
+    ("Arabic", "ar"),
+    ("Hindi", "hi"),
+    ("Dutch", "nl"),
+    ("Swedish", "sv"),
+    ("Polish", "pl"),
+    ("Turkish", "tr"),
+    ("Vietnamese", "vi"),
+    ("Thai", "th"),
+    ("Indonesian", "id"),
+]
+
 
 class TranskriptApp(App):
     """A local meeting transcriber — records mic + system audio, transcribes with Whisper."""
@@ -60,13 +83,16 @@ class TranskriptApp(App):
             yield Select([], id="mic-select", prompt="Loading devices...")
             yield Static("Output:", id="output-label")
             yield Select([], id="output-select", prompt="Loading devices...")
+            yield Static("Language:", id="lang-label")
+            yield Select(LANGUAGES, id="lang-select", prompt="Auto-detect")
         yield Footer()
 
     def on_mount(self) -> None:
         """Populate device selectors and detect loopback on mount."""
-        # Hide file buttons initially
+        # Hide file buttons and duration initially
         self.query_one("#open-file-btn").display = False
         self.query_one("#open-folder-btn").display = False
+        self.query_one("#duration-display").display = False
 
         mic_devices = list_input_devices()
         output_devices = list_output_devices()
@@ -94,6 +120,9 @@ class TranskriptApp(App):
         output_select.set_options(output_options)
         if output_options:
             output_select.value = output_options[0][1]
+
+        # Set language default
+        self.query_one("#lang-select", Select).value = ""
 
         # Load model in background
         self._load_model()
@@ -152,9 +181,10 @@ class TranskriptApp(App):
 
         self.status_text = "Recording..."
         self.query_one("#status").update(self.status_text)
-        self.query_one("#duration-display").update("Duration: 00:00:00")
 
-        # Hide file buttons when starting new recording
+        # Hide duration, file buttons, file info
+        self.query_one("#duration-display").display = False
+        self.query_one("#duration-display").update("Duration: 00:00:00")
         self.query_one("#open-file-btn").display = False
         self.query_one("#open-folder-btn").display = False
         self.query_one("#file-info").update("")
@@ -168,11 +198,15 @@ class TranskriptApp(App):
         # Get selected devices
         mic_device = self.query_one("#mic-select", Select).value
         output_device = self.query_one("#output-select", Select).value
+        lang_value = self.query_one("#lang-select", Select).value
 
         if mic_device == Select.BLANK:
             mic_device = None
         if output_device == Select.BLANK:
             output_device = None
+
+        # Language: empty string = auto-detect
+        language = lang_value if lang_value else None
 
         # Find loopback for the selected output device
         loopback_device = self._loopback_device
@@ -193,7 +227,7 @@ class TranskriptApp(App):
                 self._update_status, f"Transcribing chunk {chunk_num}..."
             )
 
-            segments, info = self.transcriber.transcribe(audio)
+            segments, info = self.transcriber.transcribe(audio, language=language)
 
             if info.language and not self.detected_language:
                 self.detected_language = info.language
@@ -229,7 +263,9 @@ class TranskriptApp(App):
         hours = int(elapsed // 3600)
         minutes = int((elapsed % 3600) // 60)
         secs = int(elapsed % 60)
-        self.query_one("#duration-display").update(f"Duration: {hours:02d}:{minutes:02d}:{secs:02d}")
+        duration_widget = self.query_one("#duration-display")
+        duration_widget.display = True
+        duration_widget.update(f"Duration: {hours:02d}:{minutes:02d}:{secs:02d}")
 
     def _stop_recording(self) -> None:
         """Stop recording."""
