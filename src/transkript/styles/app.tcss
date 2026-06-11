@@ -1,42 +1,64 @@
 /* transkript — Textual CSS */
 
+/* === Theme Overrides === */
 Screen {
-    layout: vertical;
+    background: #1a1a1a;
+    color: #e0e0e0;
 }
 
+Header {
+    background: #2d2d2d;
+    color: #ffffff;
+    dock: top;
+}
+
+Footer {
+    background: #2d2d2d;
+    color: #888888;
+    dock: bottom;
+}
+
+/* === Main Content === */
 #main-content {
     height: 1fr;
     align: center middle;
+    background: #1a1a1a;
 }
 
+/* === Record Button === */
 #record-btn {
-    width: 40;
+    width: 42;
     height: 5;
     margin: 1 0;
     text-style: bold;
+    content-align: center middle;
 }
 
+/* === Status === */
 #status {
     width: 100%;
     text-align: center;
     padding: 1 0;
     text-style: bold;
+    color: #ffffff;
 }
 
 #duration-display {
     width: 100%;
     text-align: center;
     padding: 0 0;
-    color: $text-muted;
+    color: #757575;
 }
 
 #file-info {
     width: 100%;
     text-align: center;
     padding: 1 0;
-    color: $accent;
+    color: #66bb6a;
+    text-style: bold;
 }
 
+/* === File Action Buttons === */
 #file-links {
     width: 100%;
     height: auto;
@@ -46,34 +68,37 @@ Screen {
 
 #open-file-btn {
     margin: 0 1;
-    min-width: 16;
+    min-width: 18;
 }
 
 #open-folder-btn {
     margin: 0 1;
-    min-width: 16;
+    min-width: 18;
 }
 
+/* === Device Bar === */
 #device-bar {
     width: 100%;
     height: auto;
     padding: 1 2;
     dock: bottom;
     align: center middle;
-    background: $surface-darken-1;
-    border-top: tall $primary;
+    background: #252525;
+    border-top: tall #388e3c;
 }
 
 #mic-label {
     width: auto;
     padding: 0 1 0 0;
-    color: $text-muted;
+    color: #9e9e9e;
+    text-style: bold;
 }
 
 #output-label {
     width: auto;
     padding: 0 1 0 0;
-    color: $text-muted;
+    color: #9e9e9e;
+    text-style: bold;
 }
 
 #mic-select {
