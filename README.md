@@ -13,123 +13,115 @@ Local meeting transcriber for Windows. Records your microphone and system audio 
 - Simple TUI: hit **Start**, hit **Stop**, get your transcript
 - Zero cost, zero cloud dependency
 
-## Install
+---
 
-### Option 1: Download pre-built exe (recommended)
+## Download ( easiest way )
 
-Download the latest `transkript-windows.zip` from [Releases](https://github.com/Snowiness4394/transkript/releases). Extract and run `transkript.exe` — no Python needed.
+1. Go to [Releases](https://github.com/Snowiness4394/transkript/releases)
+2. Download `transkript-windows.zip`
+3. Right-click the zip file → **Extract All** → pick a folder
+4. Open the extracted folder → double-click `transkript.exe`
 
-### Option 2: Run from source
+That's it. No Python, no terminal, nothing else needed.
 
-Requires Python 3.11+ and Windows (for WASAPI loopback).
+---
 
-```bash
-git clone https://github.com/Snowiness4394/transkript.git
-cd transkript
-uv sync
-uv run transkript
+## Build the exe yourself
+
+If you want to build it from source (or contribute), follow these steps. Takes about 5 minutes.
+
+### Step 1 — Open PowerShell
+
+1. Press the **Windows key** on your keyboard
+2. Type `powershell`
+3. Click **Windows PowerShell** (the blue one)
+4. A blue window opens — that's where you'll type commands
+
+### Step 2 — Install Git
+
+Git lets you download the code. Paste this command into PowerShell and press Enter:
+
+```powershell
+winget install Git.Git
 ```
 
-## Building the Windows exe
+Accept any prompts. When it says "Successfully installed", **close PowerShell and open it again** (this lets Git work properly).
 
-### Prerequisites
+### Step 3 — Install Python
 
-- **Windows 10/11**
-- **Python 3.11+** — [Download Python](https://www.python.org/downloads/)
-- **Git** — [Download Git](https://git-scm.com/download/win)
+Python runs the code. Paste this into PowerShell:
 
-### Step-by-step build
+```powershell
+winget install Python.Python.3.13
+```
 
-```bash
-# 1. Clone the repo
+When it finishes, **close PowerShell and open it again**.
+
+### Step 4 — Install uv
+
+uv is a fast package manager for Python. Paste this:
+
+```powershell
+pip install uv
+```
+
+### Step 5 — Download the code
+
+In PowerShell, run these one at a time:
+
+```powershell
 git clone https://github.com/Snowiness4394/transkript.git
 cd transkript
+```
 
-# 2. Install uv (if you don't have it)
-pip install uv
+### Step 6 — Install everything the app needs
 
-# 3. Install all dependencies (including PyInstaller)
+```powershell
 uv sync --group dev
+```
 
-# 4. Verify everything is ready (optional but recommended)
-#    Run on Linux/macOS:
-./test-build.sh
-#    Or on Windows:
-test-build.bat
+This downloads all the dependencies. Takes 1-2 minutes.
 
-# 5. Build the exe
-#    Run on Linux/macOS:
-./build.sh
-#    Or on Windows:
+### Step 7 — Build the exe
+
+```powershell
 build.bat
 ```
 
-### Output
+Wait for it to finish (2-3 minutes). You'll see lots of text scrolling — that's normal.
 
-The build creates a folder at `dist/transkript/` containing:
+### Step 8 — Find your exe
+
+When the build finishes, the exe is here:
 
 ```
-dist/transkript/
-├── transkript.exe          ← run this
-├── _internal/              ← bundled dependencies
-│   ├── ...
+C:\Users\<your name>\transkript\dist\transkript\transkript.exe
 ```
 
-To distribute:
-1. Zip the entire `dist/transkript/` folder
-2. Upload as `transkript-windows.zip` to GitHub Releases
-3. Users download, extract, and double-click `transkript.exe`
+To get there in File Explorer:
+1. Open File Explorer
+2. Go to `C:\Users\<your name>\transkript\dist\transkript\`
+3. You'll see `transkript.exe` and a `_internal` folder
 
-### Build troubleshooting
+**Both the exe AND the `_internal` folder need to be together.** To share it with someone, zip the whole `transkript` folder inside `dist`.
 
-Run the test script first to catch issues:
+### Step 9 — Run it
 
-```bash
-# Linux/macOS
-./test-build.sh
+Double-click `transkript.exe`. A terminal window opens with the app. That's it.
 
-# Windows
-test-build.bat
-```
+---
 
-Common issues:
-- **`ModuleNotFoundError`**: Run `uv sync --group dev` to install all deps
-- **`Python shared library not found`**: Install `libpython3.13-dev` (Linux) or rebuild Python with `--enable-shared`
-- **Antivirus warning**: PyInstaller exe sometimes trigger false positives — users can whitelist it
+## Using the app
 
-## Usage
+1. **Select your microphone** from the Mic dropdown at the bottom
+2. **Select your speakers** from the Output dropdown
+3. Click the big green **Start Recording** button
+4. Join your meeting — Teams, Zoom, Google Meet, anything
+5. When done, click the red **Stop Recording** button
+6. Wait a few seconds for transcription
+7. Click **Open File** to see your transcript, or **Open Folder** to open the folder
 
-```bash
-# Run the app
-uv run transkript
-
-# Or after pip install
-transkript
-```
-
-### CLI Options
-
-```bash
-# Use a different Whisper model (tiny/base/small/medium/large-v3)
-transkript --model small
-
-# Specify output directory
-transkript --output ~/my-transcripts
-
-# Combine options
-transkript --model medium -o ./meeting-notes
-```
-
-### How It Works
-
-1. **Open the app** — it auto-detects your microphone and speakers
-2. **Select devices** — choose your mic and output device from the dropdowns
-3. **Hit Start Recording** — the app captures both mic and system audio
-4. **Join your meeting** — Teams, Zoom, Google Meet, anything playing audio
-5. **Hit Stop Recording** — transcription begins automatically
-6. **Open your transcript** — click "Open File" or "Open Folder" when done
-
-### Transcript Format
+The transcript is a `.txt` file with timestamps like:
 
 ```
 Meeting Transcript
@@ -137,46 +129,64 @@ Date: 2025-06-11 14:30:00
 Duration: 00:12:34
 Language: English (auto-detected)
 
-[00:00:00] Hello everyone, let's get started with today's standup.
-[00:00:05] I'll go first. Yesterday I finished the API integration.
+[00:00:00] Hello everyone, let's get started.
+[00:00:05] I'll go first. Yesterday I finished the API work.
 [00:00:12] Great, any blockers?
 ```
 
-## Model Sizes
+Paste this into ChatGPT, Claude, Gemini, or any AI tool for a summary.
 
-| Model | Size | Speed | Accuracy | Best For |
+---
+
+## CLI options
+
+If you run from source instead of the exe:
+
+```powershell
+# Use a different Whisper model (tiny/base/small/medium/large-v3)
+uv run transkript --model small
+
+# Save transcripts to a different folder
+uv run transkript --output C:\Users\Me\MeetingNotes
+```
+
+## Model sizes
+
+| Model | Size | Speed | Accuracy | Best for |
 |-------|------|-------|----------|----------|
 | `tiny` | 39 MB | Fastest | Basic | Quick drafts |
-| `base` | 74 MB | Fast | Good | **Default — good balance** |
+| `base` | 74 MB | Fast | Good | **Default** |
 | `small` | 244 MB | Medium | Very good | When accuracy matters |
 | `medium` | 769 MB | Slow | Excellent | Important meetings |
 | `large-v3` | 1.5 GB | Slowest | Best | Maximum accuracy |
 
-First run downloads the model — subsequent runs are fully offline.
+First run downloads the model (~74MB for base). After that it works fully offline.
 
-## GPU Acceleration
+## Troubleshooting
 
-If you have an NVIDIA GPU, faster-whisper can use CUDA for 4-8x speedup:
+| Problem | Fix |
+|---------|-----|
+| `winget` not recognized | You're probably in Command Prompt. Open PowerShell instead (blue icon). |
+| `git` not recognized | Close PowerShell and reopen it after installing Git. |
+| `uv` not recognized | Close PowerShell and reopen it, or run `pip install uv` again. |
+| Antivirus blocks the exe | Windows Defender sometimes flags PyInstaller builds. Click "More info" → "Run anyway". It's a false positive. |
+| No microphone in dropdown | Make sure your mic is plugged in and not used by another app. |
+| No loopback device | Enable "Stereo Mix" in Windows Sound settings, or the app will only capture your mic. |
+| Build fails | Run `test-build.bat` to see what's wrong, then check the Troubleshooting section above. |
 
-```bash
-pip install faster-whisper[cuda]
-```
-
-The app will automatically use GPU if available.
-
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Start/Stop recording |
-| `q` | Quit app |
+| Enter | Start/Stop recording |
+| q | Quit app |
 
 ## Requirements
 
-- **OS**: Windows 10+ (for WASAPI loopback)
-- **Python**: 3.11+ (only needed to run from source or build the exe)
-- **Audio**: Working microphone and speakers/headphones
-- **Disk**: ~100MB for model + transcripts
+- Windows 10 or 11
+- A microphone
+- Speakers or headphones
+- ~100MB free disk space
 
 ## License
 
