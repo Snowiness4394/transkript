@@ -89,8 +89,11 @@ def record_mixed(duration: float, mic_device: int, loopback_device: int | None) 
     mic_audio = record_chunk(duration, device=mic_device)
 
     if loopback_device is not None:
-        sys_audio = record_chunk(duration, device=loopback_device)
-        audio = (mic_audio + sys_audio) / 2.0
+        try:
+            sys_audio = record_chunk(duration, device=loopback_device)
+            audio = (mic_audio + sys_audio) / 2.0
+        except Exception:
+            audio = mic_audio
     else:
         audio = mic_audio
 
@@ -102,8 +105,11 @@ def record_mixed_int16(duration: float, mic_device: int, loopback_device: int | 
     mic_audio = record_chunk_int16(duration, device=mic_device)
 
     if loopback_device is not None:
-        sys_audio = record_chunk_int16(duration, device=loopback_device)
-        mixed = (mic_audio.astype(np.int32) + sys_audio.astype(np.int32)) // 2
-        return mixed.astype(np.int16)
+        try:
+            sys_audio = record_chunk_int16(duration, device=loopback_device)
+            mixed = (mic_audio.astype(np.int32) + sys_audio.astype(np.int32)) // 2
+            return mixed.astype(np.int16)
+        except Exception:
+            return mic_audio
     else:
         return mic_audio
