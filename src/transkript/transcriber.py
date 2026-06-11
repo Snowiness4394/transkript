@@ -33,7 +33,7 @@ class TranscribeSettings:
     def low_spec(cls) -> TranscribeSettings:
         return cls(
             beam_size=1,
-            vad_filter=True,
+            vad_filter=False,
             condition_on_previous_text=False,
             compute_type="int8",
             cpu_threads=2,
