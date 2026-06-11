@@ -158,6 +158,8 @@ class TranskriptApp(App):
         self.query_one("#open-file-btn").display = False
         self.query_one("#open-folder-btn").display = False
         self.query_one("#file-info").update("")
+        self.last_file = ""
+        self.last_dir = ""
 
         self.run_worker(self._recording_loop, exclusive=True, thread=True)
 
