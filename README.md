@@ -131,6 +131,17 @@ uv run transkript --output C:\Users\Me\MeetingNotes
 
 First run downloads the model (~74MB for base). After that it works fully offline.
 
+## How it compares
+
+| Tool | Setup | Complexity | Best for |
+|------|-------|------------|----------|
+| **transkript** | 5 min | Simple | Quick, no-fuss transcription |
+| **Meetily** | 30+ min | Medium | Full meeting workflow + AI summaries |
+| **WhisperLive** | 1+ hr | Complex | Real-time streaming transcription |
+| **Char** | 20 min | Medium | Mac users who want markdown notes |
+
+**transkript** fills the simplicity gap: 5 commands to build, one button to record, one to stop. No Docker, no Rust, no Ollama.
+
 ## Troubleshooting
 
 | Problem | Fix |
