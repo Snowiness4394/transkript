@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
 from pathlib import Path
 
 from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical, Center
 from textual.reactive import reactive
 from textual.widgets import Button, Footer, Header, Select, Static
 
@@ -46,13 +47,14 @@ class TranskriptApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("", id="spacer-top")
-        yield Button("Start Recording", id="record-btn", variant="success")
-        yield Static("Ready", id="status")
-        yield Static("", id="duration-display")
-        yield Static("", id="file-info")
-        yield Static("", id="file-links")
-        yield Static("", id="spacer-bottom")
+        with Vertical(id="main-content"):
+            yield Center(Button("Start Recording", id="record-btn", variant="success"))
+            yield Static("Ready", id="status")
+            yield Static("", id="duration-display")
+            yield Static("", id="file-info")
+            with Horizontal(id="file-links"):
+                yield Button("Open File", id="open-file-btn", variant="primary")
+                yield Button("Open Folder", id="open-folder-btn", variant="primary")
         with Horizontal(id="device-bar"):
             yield Static("Mic:", id="mic-label")
             yield Select([], id="mic-select", prompt="Loading devices...")
@@ -62,6 +64,10 @@ class TranskriptApp(App):
 
     def on_mount(self) -> None:
         """Populate device selectors and detect loopback on mount."""
+        # Hide file buttons initially
+        self.query_one("#open-file-btn").display = False
+        self.query_one("#open-folder-btn").display = False
+
         mic_devices = list_input_devices()
         output_devices = list_output_devices()
 
@@ -117,6 +123,16 @@ class TranskriptApp(App):
         elif self.state == "recording":
             self._stop_recording()
 
+    @on(Button.Pressed, "#open-file-btn")
+    def handle_open_file(self, event: Button.Pressed) -> None:
+        if self.last_file:
+            os.startfile(self.last_file) if hasattr(os, 'startfile') else os.system(f'xdg-open "{self.last_file}"')
+
+    @on(Button.Pressed, "#open-folder-btn")
+    def handle_open_folder(self, event: Button.Pressed) -> None:
+        if self.last_dir:
+            os.startfile(self.last_dir) if hasattr(os, 'startfile') else os.system(f'xdg-open "{self.last_dir}"')
+
     def _start_recording(self) -> None:
         """Start recording audio."""
         if not self.transcriber.is_loaded:
@@ -136,6 +152,11 @@ class TranskriptApp(App):
 
         self.status_text = "Recording..."
         self.query_one("#status").update(self.status_text)
+
+        # Hide file buttons when starting new recording
+        self.query_one("#open-file-btn").display = False
+        self.query_one("#open-folder-btn").display = False
+        self.query_one("#file-info").update("")
 
         self.run_worker(self._recording_loop, exclusive=True, thread=True)
 
@@ -249,13 +270,11 @@ class TranskriptApp(App):
         self.status_text = "Complete"
         self.query_one("#status").update(self.status_text)
 
-        file_info = self.query_one("#file-info")
-        file_info.update(f"Transcript: {Path(filepath).name}")
+        self.query_one("#file-info").update(f"Transcript: {Path(filepath).name}")
 
-        file_links = self.query_one("#file-links")
-        file_links.update(
-            f"[Open File](file:///{filepath})    [Open Folder](file:///{self.last_dir})"
-        )
+        # Show file buttons
+        self.query_one("#open-file-btn").display = True
+        self.query_one("#open-folder-btn").display = True
 
     @on(Select.Changed, "#mic-select")
     def on_mic_changed(self, event: Select.Changed) -> None:
