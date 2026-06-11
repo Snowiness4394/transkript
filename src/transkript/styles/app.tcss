@@ -1,0 +1,80 @@
+/* transkript — Textual CSS */
+
+Screen {
+    layout: vertical;
+    align: center middle;
+}
+
+#spacer-top {
+    height: 3;
+}
+
+#record-btn {
+    width: 40;
+    height: 5;
+    margin: 1 0;
+    text-style: bold;
+}
+
+#status {
+    width: 100%;
+    text-align: center;
+    padding: 1 0;
+    text-style: bold;
+}
+
+#duration-display {
+    width: 100%;
+    text-align: center;
+    padding: 0 0;
+    color: $text-muted;
+}
+
+#file-info {
+    width: 100%;
+    text-align: center;
+    padding: 1 0;
+    color: $accent;
+}
+
+#file-links {
+    width: 100%;
+    text-align: center;
+    padding: 0 0;
+}
+
+#file-links a {
+    text-style: underline;
+}
+
+#spacer-bottom {
+    height: 1;
+}
+
+#device-bar {
+    width: 100%;
+    height: auto;
+    padding: 1 2;
+    dock: bottom;
+    align: center middle;
+}
+
+#mic-label {
+    width: auto;
+    padding: 0 1 0 0;
+}
+
+#output-label {
+    width: auto;
+    padding: 0 1 0 0;
+}
+
+#mic-select {
+    width: 1fr;
+    max-width: 30;
+}
+
+#output-select {
+    width: 1fr;
+    max-width: 30;
+}
