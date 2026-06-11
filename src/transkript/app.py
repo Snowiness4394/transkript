@@ -152,6 +152,7 @@ class TranskriptApp(App):
 
         self.status_text = "Recording..."
         self.query_one("#status").update(self.status_text)
+        self.query_one("#duration-display").update("Duration: 00:00:00")
 
         # Hide file buttons when starting new recording
         self.query_one("#open-file-btn").display = False
