@@ -44,6 +44,14 @@ LANGUAGES = [
     ("Indonesian", "id"),
 ]
 
+MODELS = [
+    ("tiny (39MB)", "tiny"),
+    ("base (74MB)", "base"),
+    ("small (244MB)", "small"),
+    ("medium (769MB)", "medium"),
+    ("large-v3 (1.5GB)", "large-v3"),
+]
+
 
 class TranskriptApp(App):
     """A local meeting transcriber — records mic + system audio, transcribes with Whisper."""
@@ -85,6 +93,8 @@ class TranskriptApp(App):
             yield Select([], id="output-select", prompt="Loading devices...")
             yield Static("Language:", id="lang-label")
             yield Select(LANGUAGES, id="lang-select", prompt="Auto-detect")
+            yield Static("Model:", id="model-label")
+            yield Select(MODELS, id="model-select", prompt="base")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -124,6 +134,9 @@ class TranskriptApp(App):
         # Set language default
         self.query_one("#lang-select", Select).value = ""
 
+        # Set model default
+        self.query_one("#model-select", Select).value = self.model_name
+
         # Load model in background
         self._load_model()
 
@@ -144,6 +157,8 @@ class TranskriptApp(App):
         self.state = "idle"
         self.status_text = "Ready"
         self.query_one("#status").update(self.status_text)
+        self.query_one("#model-select", Select).disabled = False
+        self.query_one("#record-btn").disabled = False
 
     @on(Button.Pressed, "#record-btn")
     def handle_record_button(self, event: Button.Pressed) -> None:
@@ -327,3 +342,29 @@ class TranskriptApp(App):
     def on_output_changed(self, event: Select.Changed) -> None:
         if event.value != Select.BLANK:
             self._loopback_device = find_loopback_device()
+
+    @on(Select.Changed, "#model-select")
+    def on_model_changed(self, event: Select.Changed) -> None:
+        if event.value != Select.BLANK and event.value != self.model_name:
+            self._load_new_model(event.value)
+
+    def _load_new_model(self, model_name: str) -> None:
+        """Load a new model in background."""
+        if self.state == "recording":
+            return  # Can't change model while recording
+
+        self.state = "loading"
+        self.model_name = model_name
+        self.status_text = f"Loading model ({model_name})..."
+        self.query_one("#status").update(self.status_text)
+
+        # Disable model select and record button while loading
+        self.query_one("#model-select", Select).disabled = True
+        self.query_one("#record-btn").disabled = True
+
+        self.run_worker(self._load_new_model_worker, exclusive=True, thread=True)
+
+    def _load_new_model_worker(self) -> None:
+        """Background worker to load a new model."""
+        self.transcriber.load_new(self.model_name)
+        self.call_from_thread(self._on_model_loaded)

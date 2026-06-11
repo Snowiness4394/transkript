@@ -35,6 +35,14 @@ class Transcriber:
             device=self.device,
         )
 
+    def load_new(self, model_name: str) -> None:
+        """Load a different model, replacing the current one."""
+        self.model_name = model_name
+        self._model = WhisperModel(
+            model_name,
+            device=self.device,
+        )
+
     @property
     def is_loaded(self) -> bool:
         return self._model is not None

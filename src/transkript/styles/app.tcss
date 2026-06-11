@@ -108,6 +108,13 @@ Footer {
     text-style: bold;
 }
 
+#model-label {
+    width: auto;
+    padding: 0 1 0 0;
+    color: #9e9e9e;
+    text-style: bold;
+}
+
 #mic-select {
     width: 1fr;
     max-width: 25;
@@ -121,4 +128,9 @@ Footer {
 #lang-select {
     width: 1fr;
     max-width: 20;
+}
+
+#model-select {
+    width: 1fr;
+    max-width: 22;
 }
