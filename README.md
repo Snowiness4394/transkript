@@ -13,6 +13,8 @@ Local meeting transcriber for Windows. Records your microphone and system audio 
 - Simple TUI: hit **Start**, hit **Stop**, get your transcript
 - Zero cost, zero cloud dependency
 
+![transkript UI](screenshots/preview.png)
+
 ---
 
 ## Quickest way to get running
