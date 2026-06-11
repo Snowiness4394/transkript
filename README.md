@@ -47,40 +47,24 @@ winget install Git.Git
 
 When it says "Successfully installed", **close PowerShell and open it again**.
 
-### Step 3 — Install Python
+### Step 3 — Install uv
 
 ```powershell
-winget install Python.Python.3.13
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-**Close PowerShell and open it again** when done.
+**Close PowerShell and open it again** when done. uv handles Python automatically — no need to install Python separately.
 
-### Step 4 — Install uv
-
-```powershell
-pip install uv
-```
-
-### Step 5 — Download the code
+### Step 4 — Download and build
 
 ```powershell
 git clone https://github.com/Snowiness4394/transkript.git
 cd transkript
-```
-
-### Step 6 — Install dependencies
-
-```powershell
 uv sync --group dev
-```
-
-### Step 7 — Build the exe
-
-```powershell
 build.bat
 ```
 
-### Step 8 — Run it
+### Step 5 — Run it
 
 When the build finishes, double-click:
 
