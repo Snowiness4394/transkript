@@ -97,7 +97,7 @@ class TranskriptApp(App):
         self.state = "loading"
         self.status_text = f"Loading model ({self.model_name})..."
         self.query_one("#status").update(self.status_text)
-        self.run_worker(self._load_model_worker, exclusive=True)
+        self.run_worker(self._load_model_worker, exclusive=True, thread=True)
 
     def _load_model_worker(self) -> None:
         """Background worker to load the Whisper model."""
@@ -137,7 +137,7 @@ class TranskriptApp(App):
         self.status_text = "Recording..."
         self.query_one("#status").update(self.status_text)
 
-        self.run_worker(self._recording_loop, exclusive=True)
+        self.run_worker(self._recording_loop, exclusive=True, thread=True)
 
     def _recording_loop(self) -> None:
         """Background worker: record chunks and transcribe until stopped."""
