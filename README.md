@@ -15,51 +15,45 @@ Local meeting transcriber for Windows. Records your microphone and system audio 
 
 ---
 
-## Download ( easiest way )
+## Quickest way to get running
 
-1. Go to [Releases](https://github.com/Snowiness4394/transkript/releases)
-2. Download `transkript-windows.zip`
-3. Right-click the zip file → **Extract All** → pick a folder
-4. Open the extracted folder → double-click `transkript.exe`
+If you have **OpenCode**, **Claude Code**, or any AI coding assistant, just paste this into it:
 
-That's it. No Python, no terminal, nothing else needed.
+> Download and build https://github.com/Snowiness4394/transkript, run it on my computer and put a shortcut on my desktop
+
+That's it. The AI will handle installing Python, cloning the repo, building the exe, and running it for you.
 
 ---
 
-## Build the exe yourself
+## Build it yourself
 
-If you want to build it from source (or contribute), follow these steps. Takes about 5 minutes.
+Takes about 5 minutes. You'll need Windows 10 or 11.
 
 ### Step 1 — Open PowerShell
 
 1. Press the **Windows key** on your keyboard
 2. Type `powershell`
 3. Click **Windows PowerShell** (the blue one)
-4. A blue window opens — that's where you'll type commands
 
 ### Step 2 — Install Git
 
-Git lets you download the code. Paste this command into PowerShell and press Enter:
+Paste this into PowerShell and press Enter:
 
 ```powershell
 winget install Git.Git
 ```
 
-Accept any prompts. When it says "Successfully installed", **close PowerShell and open it again** (this lets Git work properly).
+When it says "Successfully installed", **close PowerShell and open it again**.
 
 ### Step 3 — Install Python
-
-Python runs the code. Paste this into PowerShell:
 
 ```powershell
 winget install Python.Python.3.13
 ```
 
-When it finishes, **close PowerShell and open it again**.
+**Close PowerShell and open it again** when done.
 
 ### Step 4 — Install uv
-
-uv is a fast package manager for Python. Paste this:
 
 ```powershell
 pip install uv
@@ -67,20 +61,16 @@ pip install uv
 
 ### Step 5 — Download the code
 
-In PowerShell, run these one at a time:
-
 ```powershell
 git clone https://github.com/Snowiness4394/transkript.git
 cd transkript
 ```
 
-### Step 6 — Install everything the app needs
+### Step 6 — Install dependencies
 
 ```powershell
 uv sync --group dev
 ```
-
-This downloads all the dependencies. Takes 1-2 minutes.
 
 ### Step 7 — Build the exe
 
@@ -88,26 +78,15 @@ This downloads all the dependencies. Takes 1-2 minutes.
 build.bat
 ```
 
-Wait for it to finish (2-3 minutes). You'll see lots of text scrolling — that's normal.
+### Step 8 — Run it
 
-### Step 8 — Find your exe
-
-When the build finishes, the exe is here:
+When the build finishes, double-click:
 
 ```
-C:\Users\<your name>\transkript\dist\transkript\transkript.exe
+dist\transkript\transkript.exe
 ```
 
-To get there in File Explorer:
-1. Open File Explorer
-2. Go to `C:\Users\<your name>\transkript\dist\transkript\`
-3. You'll see `transkript.exe` and a `_internal` folder
-
-**Both the exe AND the `_internal` folder need to be together.** To share it with someone, zip the whole `transkript` folder inside `dist`.
-
-### Step 9 — Run it
-
-Double-click `transkript.exe`. A terminal window opens with the app. That's it.
+Both `transkript.exe` AND the `_internal` folder next to it need to stay together.
 
 ---
 
@@ -119,9 +98,9 @@ Double-click `transkript.exe`. A terminal window opens with the app. That's it.
 4. Join your meeting — Teams, Zoom, Google Meet, anything
 5. When done, click the red **Stop Recording** button
 6. Wait a few seconds for transcription
-7. Click **Open File** to see your transcript, or **Open Folder** to open the folder
+7. Click **Open File** or **Open Folder** to see your transcript
 
-The transcript is a `.txt` file with timestamps like:
+The transcript looks like this:
 
 ```
 Meeting Transcript
@@ -134,13 +113,17 @@ Language: English (auto-detected)
 [00:00:12] Great, any blockers?
 ```
 
-Paste this into ChatGPT, Claude, Gemini, or any AI tool for a summary.
+Paste it into ChatGPT, Claude, Gemini, or any AI tool for a summary.
 
 ---
 
-## CLI options
+## Running from source (without building exe)
 
-If you run from source instead of the exe:
+```powershell
+uv run transkript
+```
+
+### CLI options
 
 ```powershell
 # Use a different Whisper model (tiny/base/small/medium/large-v3)
@@ -166,13 +149,12 @@ First run downloads the model (~74MB for base). After that it works fully offlin
 
 | Problem | Fix |
 |---------|-----|
-| `winget` not recognized | You're probably in Command Prompt. Open PowerShell instead (blue icon). |
+| `winget` not recognized | Open PowerShell (blue icon), not Command Prompt. |
 | `git` not recognized | Close PowerShell and reopen it after installing Git. |
 | `uv` not recognized | Close PowerShell and reopen it, or run `pip install uv` again. |
-| Antivirus blocks the exe | Windows Defender sometimes flags PyInstaller builds. Click "More info" → "Run anyway". It's a false positive. |
+| Antivirus blocks the exe | Windows Defender flags PyInstaller builds. Click "More info" → "Run anyway". |
 | No microphone in dropdown | Make sure your mic is plugged in and not used by another app. |
 | No loopback device | Enable "Stereo Mix" in Windows Sound settings, or the app will only capture your mic. |
-| Build fails | Run `test-build.bat` to see what's wrong, then check the Troubleshooting section above. |
 
 ## Keyboard shortcuts
 
