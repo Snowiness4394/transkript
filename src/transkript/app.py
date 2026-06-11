@@ -297,6 +297,10 @@ class TranskriptApp(App):
 
     def _on_save_complete(self, filepath: str) -> None:
         """Called after transcript is saved."""
+        # Don't override state if user already started a new recording
+        if self.state != "transcribing":
+            return
+
         self.state = "done"
         self.last_file = filepath
         self.last_dir = str(Path(filepath).parent)
