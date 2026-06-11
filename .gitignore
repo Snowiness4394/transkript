@@ -31,3 +31,4 @@ transcripts/
 
 # Model cache
 .cache/
+transkript.log
