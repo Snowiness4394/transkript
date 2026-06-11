@@ -69,7 +69,7 @@ MODELS = [
     ("large-v3 (1.5GB)", "large-v3"),
 ]
 
-AUDIO_BUFFER_MAXLEN = 120
+AUDIO_BUFFER_MAXLEN = 300  # ~5 min of 1s chunks
 
 
 class TranskriptApp(App):
@@ -79,7 +79,6 @@ class TranskriptApp(App):
     TITLE = "transkript"
 
     state: reactive[str] = reactive("idle")
-    duration: reactive[float] = reactive(0.0)
     status_text: reactive[str] = reactive("Ready")
     last_file: reactive[str] = reactive("")
     last_dir: reactive[str] = reactive("")
@@ -92,11 +91,13 @@ class TranskriptApp(App):
         self.output_dir = Path(output_dir)
         self.transcriber = Transcriber(model_name=model_name, settings=TranscribeSettings.low_spec())
         self._recording_start: float = 0.0
+        self._recording_seconds: int = 0
         self._all_segments: list = []
         self._loopback_device: int | None = None
         self._audio_buffer: deque[np.ndarray] = deque(maxlen=AUDIO_BUFFER_MAXLEN)
         self._recording_thread: threading.Thread | None = None
         self._stop_recording_event = threading.Event()
+        self._duration_timer = None
 
     def _on_worker_error(self, worker, exception) -> None:
         log.error("Worker error (%s): %s", worker.worker_name, exception)
@@ -222,6 +223,8 @@ class TranskriptApp(App):
             if self.model_name == "tiny":
                 self._load_new_model("base")
 
+    # ── Recording phase ──────────────────────────────────────────────
+
     def _start_recording(self) -> None:
         if not self.transcriber.is_loaded:
             self.status_text = "Model still loading, please wait..."
@@ -230,8 +233,8 @@ class TranskriptApp(App):
 
         self.state = "recording"
         self._recording_start = time.time()
+        self._recording_seconds = 0
         self._all_segments = []
-        self.duration = 0.0
         self.detected_language = ""
         self._audio_buffer.clear()
         self._stop_recording_event.clear()
@@ -245,22 +248,36 @@ class TranskriptApp(App):
 
         self.query_one("#low-spec-switch", Switch).disabled = True
 
-        self.query_one("#duration-display").display = False
-        self.query_one("#duration-display").update("Duration: 00:00:00")
+        # Show and reset duration
+        dur = self.query_one("#duration-display")
+        dur.display = True
+        dur.update("Duration: 00:00:00")
+
         self.query_one("#open-file-btn").display = False
         self.query_one("#open-folder-btn").display = False
         self.query_one("#file-info").update("")
         self.last_file = ""
         self.last_dir = ""
 
+        # Start duration timer (ticks every second on main thread)
+        self._duration_timer = self.set_interval(1, self._tick_duration)
+
+        # Start recording thread
         self._recording_thread = threading.Thread(
             target=self._record_audio_thread, daemon=True
         )
         self._recording_thread.start()
 
-        self.run_worker(self._transcription_loop, exclusive=True, thread=True)
+    def _tick_duration(self) -> None:
+        """Called every second during recording to update the duration label."""
+        self._recording_seconds += 1
+        h = self._recording_seconds // 3600
+        m = (self._recording_seconds % 3600) // 60
+        s = self._recording_seconds % 60
+        self.query_one("#duration-display").update(f"Duration: {h:02d}:{m:02d}:{s:02d}")
 
     def _record_audio_thread(self) -> None:
+        """Background thread that records audio continuously into buffer."""
         mic_device = self.query_one("#mic-select", Select).value
         output_device = self.query_one("#output-select", Select).value
 
@@ -287,74 +304,82 @@ class TranskriptApp(App):
                 log.warning("Recording chunk failed: %s", e)
                 time.sleep(0.1)
 
+    # ── Stop recording → Transcription phase ─────────────────────────
+
     def _stop_recording(self) -> None:
-        log.info("Stopping recording...")
+        log.info("Stopping recording (%ds of audio)", self._recording_seconds)
+
+        # Stop duration timer
+        if self._duration_timer:
+            self._duration_timer.stop()
+            self._duration_timer = None
+
+        # Stop recording thread
+        self._stop_recording_event.set()
+        if self._recording_thread:
+            self._recording_thread.join(timeout=2)
+            if self._recording_thread.is_alive():
+                log.warning("Recording thread did not stop in time")
+            self._recording_thread = None
+
         self.state = "transcribing"
-        self.status_text = "Saving transcript..."
-        self.query_one("#status").update(self.status_text)
 
         btn = self.query_one("#record-btn")
         btn.label = "Transcribing..."
         btn.variant = "warning"
         btn.disabled = True
 
-        self._stop_recording_event.set()
-        if self._recording_thread:
-            self._recording_thread.join(timeout=2)
-            if self._recording_thread.is_alive():
-                log.warning("Recording thread did not stop in time, continuing anyway")
-            self._recording_thread = None
-        log.info("Recording stopped")
-
-    def _transcription_loop(self) -> None:
+        # Launch transcription worker (after stop, not concurrent)
         lang_value = self.query_one("#lang-select", Select).value
-        language = lang_value if lang_value else None
+        self._transcribe_language = lang_value if lang_value else None
+        self.run_worker(self._transcribe_after_stop, exclusive=True, thread=True)
 
-        chunk_num = 0
+    def _transcribe_after_stop(self) -> None:
+        """Transcribe all recorded audio after recording has stopped."""
         chunk_duration = 30
         sample_rate = 16000
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Drain the buffer
+        audio_chunks = []
+        while self._audio_buffer:
+            audio_chunks.append(self._audio_buffer.popleft())
+
+        if not audio_chunks:
+            log.warning("No audio to transcribe")
+            self.call_from_thread(self._on_transcription_done)
+            return
+
+        # Split into 30s chunks and transcribe sequentially
+        full_audio = np.concatenate(audio_chunks)
+        total_samples = len(full_audio)
+        samples_per_chunk = chunk_duration * sample_rate
+        chunk_num = 0
+        total_chunks = max(1, (total_samples + samples_per_chunk - 1) // samples_per_chunk)
+
+        language = self._transcribe_language
+
         try:
-            while self.state == "recording" or self._audio_buffer:
-                if len(self._audio_buffer) < chunk_duration and self.state == "recording":
-                    time.sleep(0.5)
-                    continue
+            offset = 0
+            while offset < total_samples:
+                chunk = full_audio[offset : offset + samples_per_chunk]
+                offset += samples_per_chunk
 
-                audio_chunks = []
-                total_samples = 0
-                target_samples = chunk_duration * sample_rate
-
-                while self._audio_buffer and total_samples < target_samples:
-                    chunk = self._audio_buffer.popleft()
-                    audio_chunks.append(chunk)
-                    total_samples += len(chunk)
-
-                if not audio_chunks:
-                    if self.state != "recording":
-                        break
-                    time.sleep(0.5)
-                    continue
-
-                audio = np.concatenate(audio_chunks)
-
+                # Convert int16 to float32 if needed
                 if self.low_spec:
-                    audio = int16_to_float32(audio)
+                    chunk = int16_to_float32(chunk)
 
                 chunk_num += 1
                 self.call_from_thread(
-                    self._update_status, f"Transcribing chunk {chunk_num}..."
+                    self._update_status,
+                    f"Transcribing chunk {chunk_num}/{total_chunks}...",
                 )
 
-                segments, info = self.transcriber.transcribe(audio, language=language)
+                segments, info = self.transcriber.transcribe(chunk, language=language)
 
                 if info.language and not self.detected_language:
                     self.detected_language = info.language
-                    self.call_from_thread(
-                        self._update_status,
-                        f"Recording... (detected: {info.language})"
-                    )
 
                 time_offset = (chunk_num - 1) * chunk_duration
                 for seg in segments:
@@ -365,10 +390,8 @@ class TranskriptApp(App):
                             "text": seg.text,
                         })()
                     )
-
-                self.call_from_thread(self._update_duration)
         except Exception as e:
-            log.error("Transcription loop error: %s", e, exc_info=True)
+            log.error("Transcription error: %s", e, exc_info=True)
 
         self._save_transcript()
 
@@ -376,27 +399,15 @@ class TranskriptApp(App):
         self.status_text = text
         self.query_one("#status").update(text)
 
-    def _update_duration(self) -> None:
-        elapsed = time.time() - self._recording_start
-        self.duration = elapsed
-        hours = int(elapsed // 3600)
-        minutes = int((elapsed % 3600) // 60)
-        secs = int(elapsed % 60)
-        duration_widget = self.query_one("#duration-display")
-        duration_widget.display = True
-        duration_widget.update(f"Duration: {hours:02d}:{minutes:02d}:{secs:02d}")
-
     def _save_transcript(self) -> None:
         session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"meeting_{session_id}.txt"
         filepath = self.output_dir / filename
 
-        elapsed = time.time() - self._recording_start
-
         self.transcriber.save_transcript(
             segments=self._all_segments,
             output_path=filepath,
-            duration=elapsed,
+            duration=float(self._recording_seconds),
             language=self.detected_language or "unknown",
         )
 
@@ -424,6 +435,8 @@ class TranskriptApp(App):
 
         self.query_one("#open-file-btn").display = True
         self.query_one("#open-folder-btn").display = True
+
+    # ── Device / model changes ───────────────────────────────────────
 
     @on(Select.Changed, "#mic-select")
     def on_mic_changed(self, event: Select.Changed) -> None:
