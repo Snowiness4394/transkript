@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import os
 import subprocess
+import threading
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
+
+import numpy as np
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -76,6 +80,9 @@ class TranskriptApp(App):
         self._recording_start: float = 0.0
         self._all_segments: list = []
         self._loopback_device: int | None = None
+        self._audio_buffer: deque[np.ndarray] = deque()
+        self._recording_thread: threading.Thread | None = None
+        self._stop_recording_event = threading.Event()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -196,6 +203,8 @@ class TranskriptApp(App):
         self._all_segments = []
         self.duration = 0.0
         self.detected_language = ""
+        self._audio_buffer.clear()
+        self._stop_recording_event.clear()
 
         btn = self.query_one("#record-btn")
         btn.label = "Stop Recording"
@@ -213,38 +222,90 @@ class TranskriptApp(App):
         self.last_file = ""
         self.last_dir = ""
 
-        self.run_worker(self._recording_loop, exclusive=True, thread=True)
+        # Start recording thread
+        self._recording_thread = threading.Thread(
+            target=self._record_audio_thread, daemon=True
+        )
+        self._recording_thread.start()
 
-    def _recording_loop(self) -> None:
-        """Background worker: record chunks and transcribe until stopped."""
-        # Get selected devices
+        # Start transcription loop in worker
+        self.run_worker(self._transcription_loop, exclusive=True, thread=True)
+
+    def _record_audio_thread(self) -> None:
+        """Background thread that records audio continuously into buffer."""
         mic_device = self.query_one("#mic-select", Select).value
         output_device = self.query_one("#output-select", Select).value
-        lang_value = self.query_one("#lang-select", Select).value
 
         if mic_device == Select.BLANK:
             mic_device = None
         if output_device == Select.BLANK:
             output_device = None
 
-        # Language: empty string = auto-detect
+        loopback_device = self._loopback_device
+        record_duration = 1  # seconds per chunk
+
+        while not self._stop_recording_event.is_set():
+            try:
+                audio = record_mixed(record_duration, mic_device, loopback_device)
+                self._audio_buffer.append(audio)
+            except Exception:
+                # If recording fails, wait and retry
+                time.sleep(0.1)
+
+    def _stop_recording(self) -> None:
+        """Stop recording."""
+        self.state = "transcribing"
+        self.status_text = "Saving transcript..."
+        self.query_one("#status").update(self.status_text)
+
+        btn = self.query_one("#record-btn")
+        btn.label = "Transcribing..."
+        btn.variant = "warning"
+        btn.disabled = True
+
+        # Signal recording thread to stop
+        self._stop_recording_event.set()
+        if self._recording_thread:
+            self._recording_thread.join(timeout=2)
+            self._recording_thread = None
+
+    def _transcription_loop(self) -> None:
+        """Background worker: transcribe audio chunks from buffer."""
+        lang_value = self.query_one("#lang-select", Select).value
         language = lang_value if lang_value else None
 
-        # Find loopback for the selected output device
-        loopback_device = self._loopback_device
-
         chunk_num = 0
-        chunk_duration = 30  # seconds
+        chunk_duration = 30  # target seconds per transcription chunk
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        while self.state == "recording":
-            chunk_num += 1
+        while self.state == "recording" or self._audio_buffer:
+            # Wait for enough audio to fill a chunk
+            if len(self._audio_buffer) < chunk_duration and self.state == "recording":
+                time.sleep(0.5)
+                continue
 
-            # Record mixed audio
-            audio = record_mixed(chunk_duration, mic_device, loopback_device)
+            # Collect audio from buffer
+            audio_chunks = []
+            total_samples = 0
+            target_samples = chunk_duration * 16000  # 16kHz sample rate
+
+            while self._audio_buffer and total_samples < target_samples:
+                chunk = self._audio_buffer.popleft()
+                audio_chunks.append(chunk)
+                total_samples += len(chunk)
+
+            if not audio_chunks:
+                if self.state != "recording":
+                    break
+                time.sleep(0.5)
+                continue
+
+            # Concatenate chunks
+            audio = np.concatenate(audio_chunks)
 
             # Transcribe chunk
+            chunk_num += 1
             self.call_from_thread(
                 self._update_status, f"Transcribing chunk {chunk_num}..."
             )
