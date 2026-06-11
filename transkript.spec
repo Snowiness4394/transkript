@@ -24,8 +24,6 @@ a = Analysis(
         'sounddevice',
         'faster_whisper',
         'numpy',
-        'scipy',
-        'scipy.signal',
     ],
     hookspath=[],
     hooksconfig={},

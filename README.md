@@ -15,41 +15,87 @@ Local meeting transcriber for Windows. Records your microphone and system audio 
 
 ## Install
 
-### Option 1: Download pre-built exe (recommended for non-technical users)
+### Option 1: Download pre-built exe (recommended)
 
-Download the latest `transkript-windows.zip` from [Releases](https://github.com/yourusername/transkript/releases). Extract and run `transkript.exe` — no Python needed.
+Download the latest `transkript-windows.zip` from [Releases](https://github.com/Snowiness4394/transkript/releases). Extract and run `transkript.exe` — no Python needed.
 
 ### Option 2: Run from source
 
 Requires Python 3.11+ and Windows (for WASAPI loopback).
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/transkript.git
+git clone https://github.com/Snowiness4394/transkript.git
 cd transkript
-
-# Install with uv (recommended)
 uv sync
-
-# Or with pip
-pip install -e .
+uv run transkript
 ```
 
-### Build the exe yourself
+## Building the Windows exe
+
+### Prerequisites
+
+- **Windows 10/11**
+- **Python 3.11+** — [Download Python](https://www.python.org/downloads/)
+- **Git** — [Download Git](https://git-scm.com/download/win)
+
+### Step-by-step build
 
 ```bash
-# Clone and build
-git clone https://github.com/yourusername/transkript.git
+# 1. Clone the repo
+git clone https://github.com/Snowiness4394/transkript.git
 cd transkript
 
-# Linux/macOS
-./build.sh
+# 2. Install uv (if you don't have it)
+pip install uv
 
-# Windows
+# 3. Install all dependencies (including PyInstaller)
+uv sync --group dev
+
+# 4. Verify everything is ready (optional but recommended)
+#    Run on Linux/macOS:
+./test-build.sh
+#    Or on Windows:
+test-build.bat
+
+# 5. Build the exe
+#    Run on Linux/macOS:
+./build.sh
+#    Or on Windows:
 build.bat
 ```
 
-The executable will be in `dist/transkript/transkript.exe`. Zip the folder and distribute.
+### Output
+
+The build creates a folder at `dist/transkript/` containing:
+
+```
+dist/transkript/
+├── transkript.exe          ← run this
+├── _internal/              ← bundled dependencies
+│   ├── ...
+```
+
+To distribute:
+1. Zip the entire `dist/transkript/` folder
+2. Upload as `transkript-windows.zip` to GitHub Releases
+3. Users download, extract, and double-click `transkript.exe`
+
+### Build troubleshooting
+
+Run the test script first to catch issues:
+
+```bash
+# Linux/macOS
+./test-build.sh
+
+# Windows
+test-build.bat
+```
+
+Common issues:
+- **`ModuleNotFoundError`**: Run `uv sync --group dev` to install all deps
+- **`Python shared library not found`**: Install `libpython3.13-dev` (Linux) or rebuild Python with `--enable-shared`
+- **Antivirus warning**: PyInstaller exe sometimes trigger false positives — users can whitelist it
 
 ## Usage
 
@@ -113,7 +159,6 @@ First run downloads the model — subsequent runs are fully offline.
 If you have an NVIDIA GPU, faster-whisper can use CUDA for 4-8x speedup:
 
 ```bash
-# Install with CUDA support
 pip install faster-whisper[cuda]
 ```
 
@@ -129,7 +174,7 @@ The app will automatically use GPU if available.
 ## Requirements
 
 - **OS**: Windows 10+ (for WASAPI loopback)
-- **Python**: 3.11+
+- **Python**: 3.11+ (only needed to run from source or build the exe)
 - **Audio**: Working microphone and speakers/headphones
 - **Disk**: ~100MB for model + transcripts
 
