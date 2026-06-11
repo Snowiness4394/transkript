@@ -118,7 +118,7 @@ class TranskriptApp(App):
 
     @on(Button.Pressed, "#record-btn")
     def handle_record_button(self, event: Button.Pressed) -> None:
-        if self.state == "idle":
+        if self.state in ("idle", "done"):
             self._start_recording()
         elif self.state == "recording":
             self._stop_recording()
