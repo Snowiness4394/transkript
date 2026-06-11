@@ -348,7 +348,7 @@ class TranskriptApp(App):
 
         if not audio_chunks:
             log.warning("No audio to transcribe")
-            self.call_from_thread(self._on_transcription_done)
+            self.call_from_thread(self._on_save_complete_no_file)
             return
 
         # Split into 30s chunks and transcribe sequentially
@@ -390,9 +390,13 @@ class TranskriptApp(App):
                             "text": seg.text,
                         })()
                     )
+
+                log.info("Chunk %d/%d: %d segments, total so far: %d",
+                         chunk_num, total_chunks, len(segments), len(self._all_segments))
         except Exception as e:
             log.error("Transcription error: %s", e, exc_info=True)
 
+        log.info("Transcription complete: %d total segments", len(self._all_segments))
         self._save_transcript()
 
     def _update_status(self, text: str) -> None:
@@ -435,6 +439,23 @@ class TranskriptApp(App):
 
         self.query_one("#open-file-btn").display = True
         self.query_one("#open-folder-btn").display = True
+
+    def _on_save_complete_no_file(self) -> None:
+        """Called when there was no audio to transcribe."""
+        if self.state != "transcribing":
+            return
+
+        self.state = "idle"
+
+        btn = self.query_one("#record-btn")
+        btn.label = "Start Recording"
+        btn.variant = "success"
+        btn.disabled = False
+
+        self.query_one("#low-spec-switch", Switch).disabled = False
+
+        self.status_text = "No audio recorded"
+        self.query_one("#status").update(self.status_text)
 
     # ── Device / model changes ───────────────────────────────────────
 
