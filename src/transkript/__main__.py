@@ -23,6 +23,12 @@ def main() -> None:
         help="Output directory for transcripts (default: ./transcripts)",
     )
     parser.add_argument(
+        "--low-spec",
+        action="store_true",
+        default=False,
+        help="Enable low-spec mode: tiny model, int8 quantization, beam_size=1, VAD filter, int16 audio",
+    )
+    parser.add_argument(
         "--version", "-v",
         action="version",
         version="transkript 0.1.0",
@@ -31,7 +37,13 @@ def main() -> None:
 
     from transkript.app import TranskriptApp
 
-    app = TranskriptApp(model_name=args.model, output_dir=args.output)
+    model = args.model
+    if args.low_spec and model == "base":
+        model = "tiny"
+
+    app = TranskriptApp(model_name=model, output_dir=args.output)
+    if args.low_spec:
+        app.low_spec = True
     app.run()
 
 

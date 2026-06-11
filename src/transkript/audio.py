@@ -34,25 +34,18 @@ def list_output_devices() -> list[dict]:
 
 
 def find_loopback_device(output_device_name: str | None = None) -> int | None:
-    """Find the WASAPI loopback device for system audio capture.
-
-    If output_device_name is given, look for a loopback with that name.
-    Otherwise, find any loopback device automatically.
-    """
+    """Find the WASAPI loopback device for system audio capture."""
     devices = sd.query_devices()
 
-    # First try: find a loopback device explicitly
     if output_device_name:
         for i, d in enumerate(devices):
             if "loopback" in d["name"].lower() and output_device_name.lower() in d["name"].lower():
                 return i
 
-    # Second try: any loopback device
     for i, d in enumerate(devices):
         if "loopback" in d["name"].lower():
             return i
 
-    # Third try: Stereo Mix (Windows fallback)
     for i, d in enumerate(devices):
         if "stereo mix" in d["name"].lower() and d["max_input_channels"] > 0:
             return i
@@ -61,10 +54,7 @@ def find_loopback_device(output_device_name: str | None = None) -> int | None:
 
 
 def record_chunk(duration: float, device: int | None = None) -> np.ndarray:
-    """Record a chunk of audio from the given device.
-
-    Returns a flat float32 numpy array at SAMPLE_RATE.
-    """
+    """Record a chunk of audio from the given device. Returns flat float32."""
     audio = sd.rec(
         int(duration * SAMPLE_RATE),
         samplerate=SAMPLE_RATE,
@@ -76,18 +66,44 @@ def record_chunk(duration: float, device: int | None = None) -> np.ndarray:
     return audio.flatten()
 
 
-def record_mixed(duration: float, mic_device: int, loopback_device: int | None) -> np.ndarray:
-    """Record from mic (and optionally loopback), mix them together.
+def record_chunk_int16(duration: float, device: int | None = None) -> np.ndarray:
+    """Record a chunk of audio and return as int16."""
+    audio = sd.rec(
+        int(duration * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype="int16",
+        device=device,
+    )
+    sd.wait()
+    return audio.flatten()
 
-    Returns a flat float32 numpy array at SAMPLE_RATE.
-    """
+
+def int16_to_float32(audio_int16: np.ndarray) -> np.ndarray:
+    """Convert int16 audio to float32 for Whisper."""
+    return audio_int16.astype(np.float32) / 32768.0
+
+
+def record_mixed(duration: float, mic_device: int, loopback_device: int | None) -> np.ndarray:
+    """Record from mic (and optionally loopback), mix them together. Returns float32."""
     mic_audio = record_chunk(duration, device=mic_device)
 
     if loopback_device is not None:
         sys_audio = record_chunk(duration, device=loopback_device)
-        # Mix: average the two signals
         audio = (mic_audio + sys_audio) / 2.0
     else:
         audio = mic_audio
 
     return audio
+
+
+def record_mixed_int16(duration: float, mic_device: int, loopback_device: int | None) -> np.ndarray:
+    """Record from mic (and optionally loopback) as int16, mix, return int16."""
+    mic_audio = record_chunk_int16(duration, device=mic_device)
+
+    if loopback_device is not None:
+        sys_audio = record_chunk_int16(duration, device=loopback_device)
+        mixed = (mic_audio.astype(np.int32) + sys_audio.astype(np.int32)) // 2
+        return mixed.astype(np.int16)
+    else:
+        return mic_audio

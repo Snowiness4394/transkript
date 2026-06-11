@@ -11,11 +11,19 @@ block_cipher = None
 src_dir = Path('src/transkript')
 css_files = [(str(src_dir / 'styles' / 'app.tcss'), 'transkript/styles')]
 
+# Find faster_whisper assets (VAD ONNX model)
+import importlib
+try:
+    fw_path = Path(importlib.import_module('faster_whisper').__file__).parent
+    fw_assets = str(fw_path / 'assets' / '*')
+except Exception:
+    fw_assets = ''
+
 a = Analysis(
     ['src/transkript/__main__.py'],
     pathex=[],
     binaries=[],
-    datas=css_files,
+    datas=css_files + ([(fw_assets, 'faster_whisper/assets')] if fw_assets else []),
     hiddenimports=[
         'transkript.app',
         'transkript.audio',
@@ -47,7 +55,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # Keep console for Textual TUI
+    console=True,
     disable_windowed_traceback=False,
 )
 

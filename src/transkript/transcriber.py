@@ -20,35 +20,70 @@ class Segment:
     text: str
 
 
+@dataclass
+class TranscribeSettings:
+    """Configurable transcription settings for performance tuning."""
+    beam_size: int = 5
+    vad_filter: bool = False
+    condition_on_previous_text: bool = True
+    compute_type: str = "default"
+    cpu_threads: int = 0
+
+    @classmethod
+    def low_spec(cls) -> TranscribeSettings:
+        return cls(
+            beam_size=1,
+            vad_filter=True,
+            condition_on_previous_text=False,
+            compute_type="int8",
+            cpu_threads=2,
+        )
+
+    @classmethod
+    def high_spec(cls) -> TranscribeSettings:
+        return cls(
+            beam_size=5,
+            vad_filter=False,
+            condition_on_previous_text=True,
+            compute_type="default",
+            cpu_threads=0,
+        )
+
+
 class Transcriber:
     """Wraps faster-whisper for local transcription."""
 
-    def __init__(self, model_name: str = "base", device: str = "cpu") -> None:
+    def __init__(
+        self,
+        model_name: str = "base",
+        device: str = "cpu",
+        settings: TranscribeSettings | None = None,
+    ) -> None:
         self.model_name = model_name
         self.device = device
+        self.settings = settings or TranscribeSettings()
         self._model: WhisperModel | None = None
 
     def load(self) -> None:
-        """Load the Whisper model. Downloads on first run (~74MB for base)."""
-        self._model = WhisperModel(
-            self.model_name,
-            device=self.device,
-        )
+        kwargs: dict = {"device": self.device}
+        if self.settings.compute_type != "default":
+            kwargs["compute_type"] = self.settings.compute_type
+        if self.settings.cpu_threads:
+            kwargs["cpu_threads"] = self.settings.cpu_threads
+        self._model = WhisperModel(self.model_name, **kwargs)
 
     def load_new(self, model_name: str) -> None:
-        """Load a different model, replacing the current one."""
         self.model_name = model_name
-        self._model = WhisperModel(
-            model_name,
-            device=self.device,
-        )
+        self.load()
+
+    def apply_settings(self, settings: TranscribeSettings) -> None:
+        self.settings = settings
 
     @property
     def is_loaded(self) -> bool:
         return self._model is not None
 
     def save_wav(self, audio: np.ndarray, path: Path) -> None:
-        """Save a float32 numpy array as a WAV file."""
         audio_int16 = (audio * 32767).astype(np.int16)
         with wave.open(str(path), "wb") as wf:
             wf.setnchannels(CHANNELS)
@@ -57,11 +92,14 @@ class Transcriber:
             wf.writeframes(audio_int16.tobytes())
 
     def transcribe(self, audio: np.ndarray, language: str | None = None) -> list[Segment]:
-        """Transcribe a float32 numpy array and return segments with timestamps."""
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        kwargs = {"beam_size": 5}
+        kwargs: dict = {
+            "beam_size": self.settings.beam_size,
+            "vad_filter": self.settings.vad_filter,
+            "condition_on_previous_text": self.settings.condition_on_previous_text,
+        }
         if language:
             kwargs["language"] = language
 
@@ -78,7 +116,6 @@ class Transcriber:
         return result, info
 
     def format_timestamp(self, seconds: float) -> str:
-        """Format seconds as HH:MM:SS."""
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
@@ -91,7 +128,6 @@ class Transcriber:
         duration: float,
         language: str = "unknown",
     ) -> None:
-        """Save segments to a .txt file with timestamps."""
         from datetime import datetime
 
         lines = [
