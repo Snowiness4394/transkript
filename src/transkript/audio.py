@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import sounddevice as sd
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
+
+log = logging.getLogger("transkript.audio")
 
 
 def list_input_devices() -> list[dict]:
@@ -84,32 +88,68 @@ def int16_to_float32(audio_int16: np.ndarray) -> np.ndarray:
     return audio_int16.astype(np.float32) / 32768.0
 
 
-def record_mixed(duration: float, mic_device: int, loopback_device: int | None) -> np.ndarray:
-    """Record from mic (and optionally loopback), mix them together. Returns float32."""
-    mic_audio = record_chunk(duration, device=mic_device)
+def record_mixed(
+    duration: float, mic_device: int | None, loopback_device: int | None
+) -> np.ndarray:
+    """Record mic and system audio at the same time and mix them (float32)."""
+    mic_audio = sd.rec(
+        int(duration * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype="float32",
+        device=mic_device,
+    )
 
+    sys_audio = None
     if loopback_device is not None:
         try:
-            sys_audio = record_chunk(duration, device=loopback_device)
-            audio = (mic_audio + sys_audio) / 2.0
-        except Exception:
-            audio = mic_audio
-    else:
-        audio = mic_audio
+            sys_audio = sd.rec(
+                int(duration * SAMPLE_RATE),
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype="float32",
+                device=loopback_device,
+            )
+        except Exception as exc:
+            log.warning("Loopback capture failed, continuing with mic only: %s", exc)
 
-    return audio
-
-
-def record_mixed_int16(duration: float, mic_device: int, loopback_device: int | None) -> np.ndarray:
-    """Record from mic (and optionally loopback) as int16, mix, return int16."""
-    mic_audio = record_chunk_int16(duration, device=mic_device)
-
-    if loopback_device is not None:
-        try:
-            sys_audio = record_chunk_int16(duration, device=loopback_device)
-            mixed = (mic_audio.astype(np.int32) + sys_audio.astype(np.int32)) // 2
-            return mixed.astype(np.int16)
-        except Exception:
-            return mic_audio
-    else:
+    # sd.wait() waits for every stream started so far, so both devices capture
+    # the same time window instead of sequential, non-overlapping windows.
+    sd.wait()
+    mic_audio = mic_audio.flatten()
+    if sys_audio is None:
         return mic_audio
+    return (mic_audio + sys_audio.flatten()) / 2.0
+
+
+def record_mixed_int16(
+    duration: float, mic_device: int | None, loopback_device: int | None
+) -> np.ndarray:
+    """Record mic and system audio at the same time and mix them (int16)."""
+    mic_audio = sd.rec(
+        int(duration * SAMPLE_RATE),
+        samplerate=SAMPLE_RATE,
+        channels=CHANNELS,
+        dtype="int16",
+        device=mic_device,
+    )
+
+    sys_audio = None
+    if loopback_device is not None:
+        try:
+            sys_audio = sd.rec(
+                int(duration * SAMPLE_RATE),
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype="int16",
+                device=loopback_device,
+            )
+        except Exception as exc:
+            log.warning("Loopback capture failed, continuing with mic only: %s", exc)
+
+    sd.wait()
+    mic_audio = mic_audio.flatten()
+    if sys_audio is None:
+        return mic_audio
+    mixed = (mic_audio.astype(np.int32) + sys_audio.flatten().astype(np.int32)) // 2
+    return mixed.astype(np.int16)

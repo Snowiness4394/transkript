@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 from faster_whisper import WhisperModel
+from faster_whisper.transcribe import TranscriptionInfo
 
 from transkript.audio import SAMPLE_RATE, CHANNELS
 
@@ -91,7 +92,9 @@ class Transcriber:
             wf.setframerate(SAMPLE_RATE)
             wf.writeframes(audio_int16.tobytes())
 
-    def transcribe(self, audio: np.ndarray, language: str | None = None) -> list[Segment]:
+    def transcribe(
+        self, audio: np.ndarray, language: str | None = None
+    ) -> tuple[list[Segment], TranscriptionInfo]:
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 

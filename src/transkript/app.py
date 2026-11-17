@@ -10,6 +10,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
@@ -83,13 +84,20 @@ class TranskriptApp(App):
     last_file: reactive[str] = reactive("")
     last_dir: reactive[str] = reactive("")
     detected_language: reactive[str] = reactive("")
-    low_spec: reactive[bool] = reactive(True)
+    low_spec: reactive[bool] = reactive(False)
 
-    def __init__(self, model_name: str = "base", output_dir: str = "./transcripts") -> None:
+    def __init__(
+        self,
+        model_name: str = "base",
+        output_dir: str = "./transcripts",
+        low_spec: bool = False,
+    ) -> None:
         super().__init__()
         self.model_name = model_name
         self.output_dir = Path(output_dir)
-        self.transcriber = Transcriber(model_name=model_name, settings=TranscribeSettings.low_spec())
+        self.low_spec = low_spec
+        settings = TranscribeSettings.low_spec() if low_spec else TranscribeSettings.high_spec()
+        self.transcriber = Transcriber(model_name=model_name, settings=settings)
         self._recording_start: float = 0.0
         self._recording_seconds: int = 0
         self._all_segments: list = []
@@ -98,9 +106,36 @@ class TranskriptApp(App):
         self._recording_thread: threading.Thread | None = None
         self._stop_recording_event = threading.Event()
         self._duration_timer = None
+        self._model_revert_name: str | None = None
+        self._spec_revert: tuple[bool, TranscribeSettings] | None = None
 
-    def _on_worker_error(self, worker, exception) -> None:
-        log.error("Worker error (%s): %s", worker.worker_name, exception)
+    def _enable_controls(self) -> None:
+        btn = self.query_one("#record-btn", Button)
+        btn.label = "Start Recording"
+        btn.variant = "success"
+        btn.disabled = False
+        self.query_one("#model-select", Select).disabled = False
+        self.query_one("#low-spec-switch", Switch).disabled = False
+
+    def _on_worker_failed(self, message: str) -> None:
+        """Restore a usable UI after a worker fails (load, switch or transcription)."""
+        log.error(message)
+        if self.state == "loading" and self._model_revert_name:
+            reverted = self._model_revert_name
+            self.model_name = reverted
+            self.transcriber.model_name = reverted
+            self.query_one("#model-select", Select).value = reverted
+        self._model_revert_name = None
+        if self._spec_revert:
+            previous_low_spec, previous_settings = self._spec_revert
+            self.low_spec = previous_low_spec
+            self.transcriber.apply_settings(previous_settings)
+            self.query_one("#low-spec-switch", Switch).value = previous_low_spec
+        self._spec_revert = None
+        self.state = "idle"
+        self._update_status(message)
+        self.query_one("#file-info").update("")
+        self._enable_controls()
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -123,7 +158,7 @@ class TranskriptApp(App):
                 yield Static("Model", id="model-label")
                 yield Select(MODELS, id="model-select", prompt="base")
                 with Horizontal(id="low-spec-row"):
-                    yield Switch(id="low-spec-switch", value=True)
+                    yield Switch(id="low-spec-switch", value=self.low_spec)
                     yield Static("Low-spec mode", id="low-spec-label")
         yield Footer()
 
@@ -156,12 +191,7 @@ class TranskriptApp(App):
             output_select.value = output_options[0][1]
 
         self.query_one("#lang-select", Select).value = ""
-
-        if self.low_spec and self.model_name not in ("tiny",):
-            self.model_name = "tiny"
-            self.query_one("#model-select", Select).value = "tiny"
-        else:
-            self.query_one("#model-select", Select).value = self.model_name
+        self.query_one("#model-select", Select).value = self.model_name
 
         self._load_model()
 
@@ -173,20 +203,34 @@ class TranskriptApp(App):
     def _load_model(self) -> None:
         self.state = "loading"
         self.status_text = f"Loading model ({self.model_name})..."
-        self.query_one("#status").update(self.status_text)
+        self.query_one("#status", Static).update(self.status_text)
         self.transcriber.apply_settings(self._get_settings())
-        self.run_worker(self._load_model_worker, exclusive=True, thread=True)
+        self.query_one("#record-btn", Button).disabled = True
+        self.query_one("#model-select", Select).disabled = True
+        self.query_one("#low-spec-switch", Switch).disabled = True
+        self.run_worker(
+            self._load_model_worker, exclusive=True, thread=True, exit_on_error=False
+        )
 
     def _load_model_worker(self) -> None:
-        self.transcriber.load()
+        try:
+            self.transcriber.load()
+        except Exception as exc:
+            log.exception("Model load failed")
+            self.call_from_thread(
+                self._on_worker_failed,
+                f"Failed to load model {self.model_name}: {exc}",
+            )
+            return
         self.call_from_thread(self._on_model_loaded)
 
     def _on_model_loaded(self) -> None:
         self.state = "idle"
         self.status_text = "Ready"
-        self.query_one("#status").update(self.status_text)
-        self.query_one("#model-select", Select).disabled = False
-        self.query_one("#record-btn").disabled = False
+        self.query_one("#status", Static).update(self.status_text)
+        self._model_revert_name = None
+        self._spec_revert = None
+        self._enable_controls()
 
     @on(Button.Pressed, "#record-btn")
     def handle_record_button(self, event: Button.Pressed) -> None:
@@ -213,22 +257,30 @@ class TranskriptApp(App):
 
     @on(Switch.Changed, "#low-spec-switch")
     def on_low_spec_changed(self, event: Switch.Changed) -> None:
+        if self.state not in ("idle", "done") or event.value == self.low_spec:
+            return
+
+        self._spec_revert = (self.low_spec, self.transcriber.settings)
         self.low_spec = event.value
-        if self.low_spec:
-            self.transcriber.apply_settings(TranscribeSettings.low_spec())
-            if self.model_name != "tiny":
-                self._load_new_model("tiny")
-        else:
-            self.transcriber.apply_settings(TranscribeSettings.high_spec())
-            if self.model_name == "tiny":
-                self._load_new_model("base")
+        self.transcriber.apply_settings(self._get_settings())
+
+        new_model = self.model_name
+        if event.value and new_model == "base":
+            new_model = "tiny"
+        elif not event.value and new_model == "tiny":
+            new_model = "base"
+
+        # compute_type and cpu_threads are fixed when the model is constructed,
+        # so a mode switch must always reload — even if the model name is unchanged.
+        self._load_new_model(new_model)
+        self.query_one("#model-select", Select).value = new_model
 
     # ── Recording phase ──────────────────────────────────────────────
 
     def _start_recording(self) -> None:
         if not self.transcriber.is_loaded:
             self.status_text = "Model still loading, please wait..."
-            self.query_one("#status").update(self.status_text)
+            self.query_one("#status", Static).update(self.status_text)
             return
 
         self.state = "recording"
@@ -244,9 +296,10 @@ class TranskriptApp(App):
         btn.variant = "error"
 
         self.status_text = "Recording..."
-        self.query_one("#status").update(self.status_text)
+        self.query_one("#status", Static).update(self.status_text)
 
         self.query_one("#low-spec-switch", Switch).disabled = True
+        self.query_one("#model-select", Select).disabled = True
 
         # Show and reset duration
         dur = self.query_one("#duration-display")
@@ -331,77 +384,83 @@ class TranskriptApp(App):
 
         # Launch transcription worker (after stop, not concurrent)
         lang_value = self.query_one("#lang-select", Select).value
-        self._transcribe_language = lang_value if lang_value else None
-        self.run_worker(self._transcribe_after_stop, exclusive=True, thread=True)
+        self._transcribe_language = lang_value if isinstance(lang_value, str) else None
+        self.run_worker(
+            self._transcribe_after_stop, exclusive=True, thread=True, exit_on_error=False
+        )
 
     def _transcribe_after_stop(self) -> None:
         """Transcribe all recorded audio after recording has stopped."""
-        chunk_duration = 30
-        sample_rate = 16000
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Drain the buffer
-        audio_chunks = []
-        while self._audio_buffer:
-            audio_chunks.append(self._audio_buffer.popleft())
-
-        if not audio_chunks:
-            log.warning("No audio to transcribe")
-            self.call_from_thread(self._on_save_complete_no_file)
-            return
-
-        # Split into 30s chunks and transcribe sequentially
-        full_audio = np.concatenate(audio_chunks)
-        total_samples = len(full_audio)
-        samples_per_chunk = chunk_duration * sample_rate
-        chunk_num = 0
-        total_chunks = max(1, (total_samples + samples_per_chunk - 1) // samples_per_chunk)
-
-        language = self._transcribe_language
-
         try:
-            offset = 0
-            while offset < total_samples:
-                chunk = full_audio[offset : offset + samples_per_chunk]
-                offset += samples_per_chunk
+            chunk_duration = 30
+            sample_rate = 16000
 
-                # Convert int16 to float32 if needed
-                if self.low_spec:
-                    chunk = int16_to_float32(chunk)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
-                chunk_num += 1
-                self.call_from_thread(
-                    self._update_status,
-                    f"Transcribing chunk {chunk_num}/{total_chunks}...",
-                )
+            # Drain the buffer
+            audio_chunks = []
+            while self._audio_buffer:
+                audio_chunks.append(self._audio_buffer.popleft())
 
-                segments, info = self.transcriber.transcribe(chunk, language=language)
+            if not audio_chunks:
+                log.warning("No audio to transcribe")
+                self.call_from_thread(self._on_save_complete_no_file)
+                return
 
-                if info.language and not self.detected_language:
-                    self.detected_language = info.language
+            # Split into 30s chunks and transcribe sequentially
+            full_audio = np.concatenate(audio_chunks)
+            total_samples = len(full_audio)
+            samples_per_chunk = chunk_duration * sample_rate
+            chunk_num = 0
+            total_chunks = max(1, (total_samples + samples_per_chunk - 1) // samples_per_chunk)
 
-                time_offset = (chunk_num - 1) * chunk_duration
-                for seg in segments:
-                    self._all_segments.append(
-                        type("Segment", (), {
-                            "start": seg.start + time_offset,
-                            "end": seg.end + time_offset,
-                            "text": seg.text,
-                        })()
+            language: str | None = self._transcribe_language
+
+            try:
+                offset = 0
+                while offset < total_samples:
+                    chunk = full_audio[offset : offset + samples_per_chunk]
+                    offset += samples_per_chunk
+
+                    # Convert int16 to float32 if needed
+                    if self.low_spec:
+                        chunk = int16_to_float32(chunk)
+
+                    chunk_num += 1
+                    self.call_from_thread(
+                        self._update_status,
+                        f"Transcribing chunk {chunk_num}/{total_chunks}...",
                     )
 
-                log.info("Chunk %d/%d: %d segments, total so far: %d",
-                         chunk_num, total_chunks, len(segments), len(self._all_segments))
-        except Exception as e:
-            log.error("Transcription error: %s", e, exc_info=True)
+                    segments, info = self.transcriber.transcribe(chunk, language=language)
 
-        log.info("Transcription complete: %d total segments", len(self._all_segments))
-        self._save_transcript()
+                    if info.language and not self.detected_language:
+                        self.detected_language = info.language
+
+                    time_offset = (chunk_num - 1) * chunk_duration
+                    for seg in segments:
+                        self._all_segments.append(
+                            type("Segment", (), {
+                                "start": seg.start + time_offset,
+                                "end": seg.end + time_offset,
+                                "text": seg.text,
+                            })()
+                        )
+
+                    log.info("Chunk %d/%d: %d segments, total so far: %d",
+                             chunk_num, total_chunks, len(segments), len(self._all_segments))
+            except Exception as e:
+                log.error("Transcription error: %s", e, exc_info=True)
+
+            log.info("Transcription complete: %d total segments", len(self._all_segments))
+            self._save_transcript()
+        except Exception as exc:
+            log.exception("Transcription failed")
+            self.call_from_thread(self._on_worker_failed, f"Transcription failed: {exc}")
 
     def _update_status(self, text: str) -> None:
         self.status_text = text
-        self.query_one("#status").update(text)
+        self.query_one("#status", Static).update(text)
 
     def _save_transcript(self) -> None:
         session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -425,15 +484,10 @@ class TranskriptApp(App):
         self.last_file = filepath
         self.last_dir = str(Path(filepath).parent)
 
-        btn = self.query_one("#record-btn")
-        btn.label = "Start Recording"
-        btn.variant = "success"
-        btn.disabled = False
-
-        self.query_one("#low-spec-switch", Switch).disabled = False
+        self._enable_controls()
 
         self.status_text = "Complete"
-        self.query_one("#status").update(self.status_text)
+        self.query_one("#status", Static).update(self.status_text)
 
         self.query_one("#file-info").update(f"Transcript: {Path(filepath).name}")
 
@@ -447,15 +501,10 @@ class TranskriptApp(App):
 
         self.state = "idle"
 
-        btn = self.query_one("#record-btn")
-        btn.label = "Start Recording"
-        btn.variant = "success"
-        btn.disabled = False
-
-        self.query_one("#low-spec-switch", Switch).disabled = False
+        self._enable_controls()
 
         self.status_text = "No audio recorded"
-        self.query_one("#status").update(self.status_text)
+        self.query_one("#status", Static).update(self.status_text)
 
     # ── Device / model changes ───────────────────────────────────────
 
@@ -470,24 +519,45 @@ class TranskriptApp(App):
 
     @on(Select.Changed, "#model-select")
     def on_model_changed(self, event: Select.Changed) -> None:
-        if event.value != Select.BLANK and event.value != self.model_name:
-            self._load_new_model(event.value)
+        if event.value == Select.BLANK or event.value == self.model_name:
+            return
+        if self.state not in ("idle", "done"):
+            select_widget = cast(Any, event.select)
+            select_widget.value = self.model_name
+            self._update_status("Cannot change model while recording or transcribing")
+            return
+        self._load_new_model(cast(str, event.value))
 
     def _load_new_model(self, model_name: str) -> None:
-        if self.state == "recording":
+        if self.state not in ("idle", "done"):
             return
 
+        self._model_revert_name = self.model_name
         self.state = "loading"
         self.model_name = model_name
         self.status_text = f"Loading model ({model_name})..."
-        self.query_one("#status").update(self.status_text)
+        self.query_one("#status", Static).update(self.status_text)
 
         self.query_one("#model-select", Select).disabled = True
-        self.query_one("#record-btn").disabled = True
+        self.query_one("#record-btn", Button).disabled = True
+        self.query_one("#low-spec-switch", Switch).disabled = True
 
         self.transcriber.apply_settings(self._get_settings())
-        self.run_worker(self._load_new_model_worker, exclusive=True, thread=True)
+        self.run_worker(
+            self._load_new_model_worker,
+            exclusive=True,
+            thread=True,
+            exit_on_error=False,
+        )
 
     def _load_new_model_worker(self) -> None:
-        self.transcriber.load_new(self.model_name)
+        try:
+            self.transcriber.load_new(self.model_name)
+        except Exception as exc:
+            log.exception("Model switch failed")
+            self.call_from_thread(
+                self._on_worker_failed,
+                f"Failed to load model {self.model_name}: {exc}",
+            )
+            return
         self.call_from_thread(self._on_model_loaded)

@@ -26,7 +26,7 @@ def main() -> None:
         "--low-spec",
         action="store_true",
         default=False,
-        help="Enable low-spec mode: tiny model, int8 quantization, beam_size=1, VAD filter, int16 audio",
+        help="Enable low-spec mode: tiny model, int8 quantization, beam_size=1, int16 audio",
     )
     parser.add_argument(
         "--version", "-v",
@@ -41,9 +41,9 @@ def main() -> None:
     if args.low_spec and model == "base":
         model = "tiny"
 
-    app = TranskriptApp(model_name=model, output_dir=args.output)
-    if args.low_spec:
-        app.low_spec = True
+    app = TranskriptApp(
+        model_name=model, output_dir=args.output, low_spec=args.low_spec
+    )
     app.run()
 
 
