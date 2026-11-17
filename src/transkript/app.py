@@ -16,6 +16,7 @@ import numpy as np
 
 from textual import on
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, Center
 from textual.reactive import reactive
 from textual.widgets import Button, Footer, Header, Select, Static, Switch
@@ -78,6 +79,10 @@ class TranskriptApp(App):
 
     CSS_PATH = "styles/app.tcss"
     TITLE = "transkript"
+    BINDINGS = [
+        Binding("enter", "toggle_recording", "Start/Stop"),
+        Binding("q", "quit", "Quit"),
+    ]
 
     state: reactive[str] = reactive("idle")
     status_text: reactive[str] = reactive("Ready")
@@ -108,6 +113,8 @@ class TranskriptApp(App):
         self._duration_timer = None
         self._model_revert_name: str | None = None
         self._spec_revert: tuple[bool, TranscribeSettings] | None = None
+        self._recording_limit_reached: bool = False
+        self._transcribe_language: str | None = None
 
     def _enable_controls(self) -> None:
         btn = self.query_one("#record-btn", Button)
@@ -234,6 +241,9 @@ class TranskriptApp(App):
 
     @on(Button.Pressed, "#record-btn")
     def handle_record_button(self, event: Button.Pressed) -> None:
+        self.action_toggle_recording()
+
+    def action_toggle_recording(self) -> None:
         if self.state in ("idle", "done"):
             self._start_recording()
         elif self.state == "recording":
@@ -283,7 +293,13 @@ class TranskriptApp(App):
             self.query_one("#status", Static).update(self.status_text)
             return
 
+        mic_device = self.query_one("#mic-select", Select).value
+        if not isinstance(mic_device, int) or mic_device < 0:
+            self._update_status("No microphone found — select an input device")
+            return
+
         self.state = "recording"
+        self._recording_limit_reached = False
         self._recording_start = time.time()
         self._recording_seconds = 0
         self._all_segments = []
@@ -334,9 +350,9 @@ class TranskriptApp(App):
         mic_device = self.query_one("#mic-select", Select).value
         output_device = self.query_one("#output-select", Select).value
 
-        if mic_device == Select.BLANK:
+        if not isinstance(mic_device, int) or mic_device < 0:
             mic_device = None
-        if output_device == Select.BLANK:
+        if not isinstance(output_device, int) or output_device < 0:
             output_device = None
 
         loopback_device = self._loopback_device
@@ -348,18 +364,28 @@ class TranskriptApp(App):
                     audio = record_mixed_int16(record_duration, mic_device, loopback_device)
                 else:
                     audio = record_mixed(record_duration, mic_device, loopback_device)
-                if not self._stop_recording_event.is_set():
-                    self._audio_buffer.append(audio)
             except Exception as e:
                 if self._stop_recording_event.is_set():
                     log.debug("Recording stopped cleanly during device wait")
                     break
                 log.warning("Recording chunk failed: %s", e)
                 time.sleep(0.1)
+                continue
+
+            # Keep the chunk that was in flight when Stop was pressed.
+            self._audio_buffer.append(audio)
+
+            if len(self._audio_buffer) >= AUDIO_BUFFER_MAXLEN:
+                self._recording_limit_reached = True
+                self._stop_recording_event.set()
+                log.warning("Maximum recording length reached; stopping recording")
+                self.call_from_thread(self._stop_recording)
 
     # ── Stop recording → Transcription phase ─────────────────────────
 
     def _stop_recording(self) -> None:
+        if self.state != "recording":
+            return
         log.info("Stopping recording (%ds of audio)", self._recording_seconds)
 
         # Stop duration timer
@@ -472,6 +498,7 @@ class TranskriptApp(App):
             output_path=filepath,
             duration=float(self._recording_seconds),
             language=self.detected_language or "unknown",
+            language_was_explicit=self._transcribe_language is not None,
         )
 
         self.call_from_thread(self._on_save_complete, str(filepath))
@@ -486,7 +513,11 @@ class TranskriptApp(App):
 
         self._enable_controls()
 
-        self.status_text = "Complete"
+        self.status_text = (
+            "Complete — maximum length reached"
+            if self._recording_limit_reached
+            else "Complete"
+        )
         self.query_one("#status", Static).update(self.status_text)
 
         self.query_one("#file-info").update(f"Transcript: {Path(filepath).name}")

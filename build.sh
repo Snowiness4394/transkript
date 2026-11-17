@@ -20,9 +20,9 @@ uv run pyinstaller transkript.spec --clean --noconfirm
 
 echo ""
 echo "=== Build complete ==="
-echo "Executable location: dist/transkript/transkript.exe"
+echo "Executable location: dist/transkript/transkript"
 echo ""
 echo "To distribute:"
 echo "  1. Zip the dist/transkript/ folder"
-echo "  2. Users extract and run transkript.exe"
+echo "  2. Users extract and run ./transkript from that folder"
 echo ""

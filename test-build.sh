@@ -3,6 +3,7 @@
 # Run this before building to catch issues early
 
 set -e
+set -o pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -20,8 +21,8 @@ echo ""
 
 # 1. Check Python version
 echo "--- Python ---"
-PY_VERSION=$(python3 --version 2>&1)
-if [[ "$PY_VERSION" == *"3.1"* ]]; then
+PY_VERSION=$(uv run python --version 2>&1)
+if uv run python -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'; then
     pass "$PY_VERSION"
 else
     fail "$PY_VERSION (need 3.11+)"
@@ -39,8 +40,11 @@ fi
 # 3. Install dependencies
 echo ""
 echo "--- Dependencies ---"
-uv sync --group dev 2>&1 | tail -1
-pass "Dependencies installed"
+if uv sync --group dev >/dev/null 2>&1; then
+    pass "Dependencies installed"
+else
+    fail "Dependency installation failed"
+fi
 
 # 4. Check PyInstaller
 echo ""
@@ -110,13 +114,13 @@ else
     fail "styles/app.tcss missing"
 fi
 
-# 9. Test PyInstaller dry run (analysis only)
+# 9. Full build check
 echo ""
-echo "--- PyInstaller analysis ---"
-if uv run pyinstaller transkript.spec --clean --noconfirm 2>&1 | grep -q "Building Analysis"; then
-    pass "PyInstaller analysis completed"
+echo "--- PyInstaller build ---"
+if uv run pyinstaller transkript.spec --clean --noconfirm >/dev/null 2>&1; then
+    pass "PyInstaller build completed"
 else
-    fail "PyInstaller analysis failed"
+    fail "PyInstaller build failed"
 fi
 
 # Summary

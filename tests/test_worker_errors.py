@@ -22,7 +22,7 @@ def test_model_load_failure_restores_idle_and_reports_error():
     async def run():
         with (
             patch.object(Transcriber, "load", boom),
-            patch("transkript.app.list_input_devices", return_value=[]),
+            patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
             patch("transkript.app.list_output_devices", return_value=[]),
             patch("transkript.app.find_loopback_device", return_value=None),
         ):
@@ -51,7 +51,7 @@ def test_model_switch_failure_reverts_model_and_restores_controls():
     async def run():
         with (
             patch.object(Transcriber, "load", flaky_load),
-            patch("transkript.app.list_input_devices", return_value=[]),
+            patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
             patch("transkript.app.list_output_devices", return_value=[]),
             patch("transkript.app.find_loopback_device", return_value=None),
         ):
@@ -83,7 +83,7 @@ def test_failed_low_spec_toggle_restores_mode_and_settings():
     async def run():
         with (
             patch.object(Transcriber, "load", flaky_load),
-            patch("transkript.app.list_input_devices", return_value=[]),
+            patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
             patch("transkript.app.list_output_devices", return_value=[]),
             patch("transkript.app.find_loopback_device", return_value=None),
         ):
@@ -115,7 +115,7 @@ def test_failed_transcription_resets_record_button_label():
             patch.object(Transcriber, "load", fake_load),
             patch.object(Transcriber, "transcribe", fake_transcribe),
             patch.object(Transcriber, "save_transcript", side_effect=RuntimeError("disk full")),
-            patch("transkript.app.list_input_devices", return_value=[]),
+            patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
             patch("transkript.app.list_output_devices", return_value=[]),
             patch("transkript.app.find_loopback_device", return_value=None),
             patch("transkript.app.record_mixed", return_value=np.zeros(16000)),
@@ -152,7 +152,7 @@ def test_save_failure_reports_error_instead_of_stuck_transcribing():
                 "save_transcript",
                 side_effect=RuntimeError("disk full"),
             ),
-            patch("transkript.app.list_input_devices", return_value=[]),
+            patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
             patch("transkript.app.list_output_devices", return_value=[]),
             patch("transkript.app.find_loopback_device", return_value=None),
             patch("transkript.app.record_mixed", return_value=np.zeros(16000)),

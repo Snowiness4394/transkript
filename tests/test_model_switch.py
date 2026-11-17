@@ -43,7 +43,7 @@ def patch_common():
     return (
         patch.object(Transcriber, "load", fake_load),
         patch.object(Transcriber, "transcribe", blocking_transcribe),
-        patch("transkript.app.list_input_devices", return_value=[]),
+        patch("transkript.app.list_input_devices", return_value=[{"index": 0, "name": "Mic", "channels": 1}]),
         patch("transkript.app.list_output_devices", return_value=[]),
         patch("transkript.app.find_loopback_device", return_value=None),
         patch("transkript.app.record_mixed", return_value=np.zeros(16000)),

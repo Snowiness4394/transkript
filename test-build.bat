@@ -10,9 +10,9 @@ echo.
 
 REM 1. Check Python
 echo --- Python ---
-python --version >nul 2>&1
+uv run python --version >nul 2>&1
 if %errorlevel% equ 0 (
-    for /f "tokens=*" %%i in ('python --version 2^>^&1') do echo PASS — %%i
+    for /f "tokens=*" %%i in ('uv run python --version 2^>^&1') do echo PASS — %%i
 ) else (
     echo FAIL — Python not found
     set /a ERRORS+=1
@@ -33,7 +33,12 @@ REM 3. Install dependencies
 echo.
 echo --- Dependencies ---
 call uv sync --group dev
-echo PASS — Dependencies installed
+if %errorlevel% equ 0 (
+    echo PASS — Dependencies installed
+) else (
+    echo FAIL — Dependency installation failed
+    set /a ERRORS+=1
+)
 
 REM 4. Check PyInstaller
 echo.

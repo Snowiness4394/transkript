@@ -92,7 +92,7 @@ The transcript looks like this:
 Meeting Transcript
 Date: 2025-06-11 14:30:00
 Duration: 00:12:34
-Language: English (auto-detected)
+Language: en (auto-detected)
 
 [00:00:00] Hello everyone, let's get started.
 [00:00:05] I'll go first. Yesterday I finished the API work.
@@ -117,6 +117,9 @@ uv run transkript --model small
 
 # Save transcripts to a different folder
 uv run transkript --output C:\Users\Me\MeetingNotes
+
+# Use low-spec mode (tiny model, int8 quantization, less CPU/memory)
+uv run transkript --low-spec
 ```
 
 ## Model sizes
@@ -165,7 +168,7 @@ First run downloads the model (~74MB for base). After that it works fully offlin
 - Windows 10 or 11
 - A microphone
 - Speakers or headphones
-- ~100MB free disk space
+- ~360MB for the bundled app, plus up to ~1.5GB for the largest Whisper model
 
 ## License
 

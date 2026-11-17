@@ -130,14 +130,22 @@ class Transcriber:
         output_path: Path,
         duration: float,
         language: str = "unknown",
+        language_was_explicit: bool = False,
     ) -> None:
         from datetime import datetime
+
+        if not language or language == "unknown":
+            language_line = "Language: unknown"
+        elif language_was_explicit:
+            language_line = f"Language: {language} (selected)"
+        else:
+            language_line = f"Language: {language} (auto-detected)"
 
         lines = [
             "Meeting Transcript",
             f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             f"Duration: {self.format_timestamp(duration)}",
-            f"Language: {language} (auto-detected)",
+            language_line,
             "",
         ]
 
